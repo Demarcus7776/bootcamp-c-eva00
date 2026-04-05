@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>42 C Trainer — Evaluate Yourself</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Unbounded:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ░░ BACKGROUND GRID ░░ -->
+  <div class="bg-grid"></div>
+  <div class="bg-scanlines"></div>
+
+  <!-- ░░ APP ROOT ░░ -->
+  <div id="app">
+
+    <!-- ════════════════════════════════════
+         SCREEN 0 — LANDING
+    ════════════════════════════════════ -->
+    <section id="screen-landing" class="screen active">
+      <div class="landing-inner">
+        <div class="logo-row">
+          <span class="logo-42">42</span>
+          <span class="logo-sep">/</span>
+          <span class="logo-title">C TRAINER</span>
+        </div>
+        <p class="landing-sub">// evaluate.yourself() — inspired by 42 school</p>
+        <div class="landing-stats">
+          <div class="stat-pill"><span class="stat-n">20+</span><span class="stat-l">questions</span></div>
+          <div class="stat-pill"><span class="stat-n">15+</span><span class="stat-l">challenges</span></div>
+          <div class="stat-pill"><span class="stat-n">100</span><span class="stat-l">points max</span></div>
+        </div>
+        <div class="rules-card">
+          <p class="rules-title">HOW IT WORKS</p>
+          <ul class="rules-list">
+            <li><span class="pill-tag quiz-tag">QUIZ</span> 10 random C questions — 1pt each</li>
+            <li><span class="pill-tag code-tag">CODE</span> 10 random challenges — 10pts each</li>
+            <li><span class="pill-tag rate-tag">RATE</span> Get your honest evaluation</li>
+            <li><span class="pill-tag coach-tag">COACH</span> Personalized improvement plan</li>
+          </ul>
+        </div>
+        <button class="btn-start" onclick="startSession()">
+          <span>START EVALUATION</span>
+          <span class="btn-arrow">→</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════
+         SCREEN 1 — QUIZ
+    ════════════════════════════════════ -->
+    <section id="screen-quiz" class="screen">
+      <div class="top-bar">
+        <span class="top-label quiz-tag">QUIZ PHASE</span>
+        <div class="top-score-row">
+          <span id="quiz-score-live" class="score-live">0 / 10</span>
+        </div>
+        <span class="top-label" id="q-counter">Q 1/10</span>
+      </div>
+
+      <div class="progress-track">
+        <div class="progress-fill" id="quiz-progress"></div>
+        <span class="progress-label" id="quiz-progress-label">0%</span>
+      </div>
+
+      <div class="card question-card" id="question-card">
+        <div class="q-topic-badge" id="q-topic"></div>
+        <p class="q-text" id="q-text"></p>
+        <div class="options-grid" id="options-container"></div>
+        <div class="explain-box hidden" id="explain-box"></div>
+      </div>
+
+      <div class="nav-row">
+        <button class="btn-next hidden" id="btn-next-q" onclick="nextQuestion()">NEXT →</button>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════
+         SCREEN 2 — QUIZ RESULTS (brief)
+    ════════════════════════════════════ -->
+    <section id="screen-quiz-done" class="screen">
+      <div class="interlude-card">
+        <p class="interlude-label">QUIZ COMPLETE</p>
+        <div class="big-score" id="quiz-final-score">0/10</div>
+        <p class="interlude-sub" id="quiz-grade-msg"></p>
+        <button class="btn-start" onclick="startChallenges()">
+          <span>BEGIN CODING CHALLENGES</span>
+          <span class="btn-arrow">→</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════
+         SCREEN 3 — CHALLENGES
+    ════════════════════════════════════ -->
+    <section id="screen-challenges" class="screen">
+      <div class="top-bar">
+        <span class="top-label code-tag">CHALLENGE PHASE</span>
+        <div class="top-score-row">
+          <span id="code-score-live" class="score-live">0 / 100</span>
+        </div>
+        <span class="top-label" id="c-counter">C 1/10</span>
+      </div>
+
+      <div class="progress-track">
+        <div class="progress-fill green-fill" id="code-progress"></div>
+        <span class="progress-label" id="code-progress-label">0%</span>
+      </div>
+
+      <div class="card challenge-card">
+        <div class="challenge-header">
+          <span class="challenge-name" id="ch-name"></span>
+          <span class="diff-badge" id="ch-diff"></span>
+        </div>
+
+        <p class="ch-desc" id="ch-desc"></p>
+
+        <div class="examples-block" id="ch-examples"></div>
+
+        <div class="hint-block" id="ch-hint"></div>
+
+        <!-- Code editor -->
+        <div class="editor-wrap">
+          <div class="editor-topbar">
+            <div class="editor-dots">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <span class="editor-fname" id="ch-filename">solution.c</span>
+          </div>
+          <textarea
+            id="code-input"
+            class="code-area"
+            spellcheck="false"
+            placeholder="#include <stdio.h>&#10;&#10;// write your solution here...&#10;"
+          ></textarea>
+        </div>
+
+        <!-- Self-grade -->
+        <div class="self-grade-row">
+          <span class="sg-label">How did you do?</span>
+          <div class="sg-btns">
+            <button class="sg-btn" id="sg-perfect"  onclick="setSelfGrade('perfect')">✓ Perfect</button>
+            <button class="sg-btn" id="sg-almost"   onclick="setSelfGrade('almost')">~ Almost</button>
+            <button class="sg-btn" id="sg-struggled" onclick="setSelfGrade('struggled')">✗ Struggled</button>
+            <button class="sg-btn" id="sg-skipped"  onclick="setSelfGrade('skipped')">⊘ Skipped</button>
+          </div>
+        </div>
+
+        <div class="ch-actions">
+          <button class="btn-next" onclick="nextChallenge()">NEXT CHALLENGE →</button>
+          <button class="btn-ghost" onclick="toggleSolution()">👁 SHOW SOLUTION</button>
+        </div>
+
+        <div class="solution-reveal hidden" id="solution-reveal">
+          <div class="sol-header">// sample solution</div>
+          <pre id="sol-code" class="sol-pre"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════
+         SCREEN 4 — FINAL RESULTS
+    ════════════════════════════════════ -->
+    <section id="screen-results" class="screen">
+      <div class="results-inner">
+
+        <!-- Score breakdown -->
+        <div class="card score-breakdown">
+          <p class="section-tag">EVALUATION COMPLETE</p>
+          <div class="score-row-breakdown">
+            <div class="score-part">
+              <span class="sp-label">Quiz</span>
+              <span class="sp-val quiz-color" id="res-quiz">0/10</span>
+            </div>
+            <div class="score-divider">+</div>
+            <div class="score-part">
+              <span class="sp-label">Code</span>
+              <span class="sp-val code-color" id="res-code">0/100</span>
+            </div>
+            <div class="score-divider">=</div>
+            <div class="score-part">
+              <span class="sp-label">Final</span>
+              <span class="sp-val final-color" id="res-final">0/100</span>
+            </div>
+          </div>
+
+          <!-- Animated score bar -->
+          <div class="final-bar-track">
+            <div class="final-bar-fill" id="final-bar"></div>
+          </div>
+
+          <!-- Rating -->
+          <div class="rating-display">
+            <span class="rating-emoji" id="rating-emoji">🤔</span>
+            <p class="rating-text" id="rating-text">Calculating…</p>
+          </div>
+        </div>
+
+        <!-- Coach card -->
+        <div class="card coach-card" id="coach-card">
+          <p class="section-tag coach-title-tag" id="coach-tier-tag">// COACH SAYS</p>
+          <p class="coach-verdict" id="coach-verdict"></p>
+          <div class="coach-roadmap" id="coach-roadmap"></div>
+          <div class="coach-exercises" id="coach-exercises"></div>
+        </div>
+
+        <!-- Train again -->
+        <button class="btn-start btn-train-again" onclick="trainAgain()">
+          <span>↺ TRAIN AGAIN</span>
+          <span class="btn-arrow">→</span>
+        </button>
+
+      </div>
+    </section>
+
+  </div><!-- /#app -->
+
+  <script src="script.js"></script>
+</body>
+</html>
