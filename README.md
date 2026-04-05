@@ -92,7 +92,7 @@ You can deploy easily using:
 
 ## 🧑‍💻 Author
 
-Built with <3❤️ to help new poolers to  improve their C skills.
+Built with ❤️ to help new poolers to  improve their C skills.
 
 ---
 
