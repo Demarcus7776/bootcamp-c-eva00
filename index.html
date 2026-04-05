@@ -28,6 +28,19 @@
           <span class="logo-title">C TRAINER</span>
         </div>
         <p class="landing-sub">// evaluate.yourself() — inspired by 42 school</p>
+
+        <!-- ── XP / Level display (populated by JS from localStorage) ── -->
+        <div class="xp-panel" id="xp-panel">
+          <div class="xp-top-row">
+            <span class="xp-level-label" id="xp-level-label">BEGINNER</span>
+            <span class="xp-pts" id="xp-pts">0 XP</span>
+          </div>
+          <div class="xp-bar-track">
+            <div class="xp-bar-fill" id="xp-bar-fill"></div>
+          </div>
+          <div class="xp-history" id="xp-history"></div>
+        </div>
+
         <div class="landing-stats">
           <div class="stat-pill"><span class="stat-n">20+</span><span class="stat-l">questions</span></div>
           <div class="stat-pill"><span class="stat-n">15+</span><span class="stat-l">challenges</span></div>
@@ -57,6 +70,13 @@
         <span class="top-label quiz-tag">QUIZ PHASE</span>
         <div class="top-score-row">
           <span id="quiz-score-live" class="score-live">0 / 10</span>
+          <!-- XP earned this session -->
+          <span class="xp-live-badge" id="quiz-xp-live">+0 XP</span>
+        </div>
+        <!-- Timer display -->
+        <div class="timer-display" id="quiz-timer">
+          <span class="timer-icon">⏱</span>
+          <span class="timer-val" id="quiz-timer-val">5:00</span>
         </div>
         <span class="top-label" id="q-counter">Q 1/10</span>
       </div>
@@ -101,6 +121,12 @@
         <span class="top-label code-tag">CHALLENGE PHASE</span>
         <div class="top-score-row">
           <span id="code-score-live" class="score-live">0 / 100</span>
+          <span class="xp-live-badge" id="code-xp-live">+0 XP</span>
+        </div>
+        <!-- Timer display -->
+        <div class="timer-display" id="code-timer">
+          <span class="timer-icon">⏱</span>
+          <span class="timer-val" id="code-timer-val">30:00</span>
         </div>
         <span class="top-label" id="c-counter">C 1/10</span>
       </div>
@@ -153,7 +179,17 @@
 
         <div class="ch-actions">
           <button class="btn-next" onclick="nextChallenge()">NEXT CHALLENGE →</button>
+          <button class="btn-run"  onclick="runCode()">▶ RUN CODE</button>
           <button class="btn-ghost" onclick="toggleSolution()">👁 SHOW SOLUTION</button>
+        </div>
+
+        <!-- Run output area (hidden until RUN is clicked) -->
+        <div class="run-output hidden" id="run-output">
+          <div class="run-output-header">
+            <span>// test results</span>
+            <span class="run-status" id="run-status"></span>
+          </div>
+          <div class="run-cases" id="run-cases"></div>
         </div>
 
         <div class="solution-reveal hidden" id="solution-reveal">
@@ -199,6 +235,18 @@
             <span class="rating-emoji" id="rating-emoji">🤔</span>
             <p class="rating-text" id="rating-text">Calculating…</p>
           </div>
+        </div>
+
+        <!-- Achievements -->
+        <div class="card achievements-card" id="achievements-card">
+          <p class="section-tag">🏆 ACHIEVEMENTS</p>
+          <div class="achievements-grid" id="achievements-grid"></div>
+        </div>
+
+        <!-- Weakness detection -->
+        <div class="card weakness-card" id="weakness-card">
+          <p class="section-tag">🔍 WEAK AREAS DETECTED</p>
+          <div class="weakness-list" id="weakness-list"></div>
         </div>
 
         <!-- Coach card -->

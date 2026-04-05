@@ -652,13 +652,26 @@ const STATE = {
   // Challenges
   challengePool:  [],   // 10 shuffled challenges
   challengeIndex: 0,    // current challenge index
-  challengeScores:[],   // per-challenge: 10, 5, 0
+  challengeScores:[],   // per-challenge points earned
   selfGrade:      null, // 'perfect' | 'almost' | 'struggled' | 'skipped'
 
   // Results
   finalQuizScore: 0,    // 0-10
   finalCodeScore: 0,    // 0-100
-  finalScore:     0     // 0-100
+  finalScore:     0,    // 0-100
+
+  // ── NEW v3.0 ──────────────────────────────────────────────
+  // Weakness tracking: mistakes per topic
+  topicMistakes:  {},   // { "POINTERS": 2, "BASICS": 1, ... }
+  // Challenge weakness tracking: skipped/struggled per challenge
+  challengeWeakness: [], // array of { name, topic, score }
+  // XP earned this session
+  sessionXP:      0,
+  // Timers (interval IDs)
+  quizTimerID:    null,
+  codeTimerID:    null,
+  quizSecondsLeft:  300, // 5 minutes
+  codeSecondsLeft: 1800  // 30 minutes
 };
 
 
@@ -710,14 +723,460 @@ function setProgress(barId, labelId, pct) {
 
 
 /* ══════════════════════════════════════════════════════════════
+   4b. XP & LEVEL SYSTEM
+══════════════════════════════════════════════════════════════ */
+
+const XP_LEVELS = [
+  { name: 'BEGINNER',     min: 0   },
+  { name: 'INTERMEDIATE', min: 100 },
+  { name: 'ADVANCED',     min: 250 },
+  { name: 'GOAT 🐐',      min: 500 }
+];
+
+/** Get level info from total XP */
+function getLevel(xp) {
+  let level = XP_LEVELS[0];
+  for (const l of XP_LEVELS) {
+    if (xp >= l.min) level = l;
+  }
+  const nextLevel = XP_LEVELS[XP_LEVELS.indexOf(level) + 1];
+  const progress  = nextLevel
+    ? ((xp - level.min) / (nextLevel.min - level.min)) * 100
+    : 100;
+  return { name: level.name, progress, nextMin: nextLevel ? nextLevel.min : null };
+}
+
+/** Award XP and save */
+function awardXP(amount, reason) {
+  STATE.sessionXP += amount;
+  const stored = loadStorage();
+  stored.totalXP = (stored.totalXP || 0) + amount;
+  stored.lastScore = STATE.finalScore || stored.lastScore || 0;
+  saveStorage(stored);
+  updateXPBadge();
+}
+
+/** Flash the XP badge in top bar */
+function updateXPBadge() {
+  ['quiz-xp-live', 'code-xp-live'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.textContent = `+${STATE.sessionXP} XP`;
+      el.classList.remove('pop');
+      void el.offsetWidth;
+      el.classList.add('pop');
+    }
+  });
+}
+
+/** Render XP panel on landing screen */
+function renderXPPanel() {
+  const stored = loadStorage();
+  const xp = stored.totalXP || 0;
+  const lv = getLevel(xp);
+
+  document.getElementById('xp-level-label').textContent = lv.name;
+  document.getElementById('xp-pts').textContent = `${xp} XP`;
+  setTimeout(() => {
+    document.getElementById('xp-bar-fill').style.width = lv.progress + '%';
+  }, 100);
+
+  const hist = document.getElementById('xp-history');
+  if (stored.lastScore) {
+    hist.textContent = `Last score: ${stored.lastScore}/100 · Sessions: ${stored.sessions || 0}`;
+  } else {
+    hist.textContent = 'No previous sessions — start your first evaluation!';
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   4c. LOCAL STORAGE
+══════════════════════════════════════════════════════════════ */
+
+const LS_KEY = 'c42trainer_v3';
+
+function loadStorage() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY)) || {};
+  } catch { return {}; }
+}
+
+function saveStorage(data) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch {}
+}
+
+/** Persist end-of-session data */
+function persistSession() {
+  const stored = loadStorage();
+  stored.totalXP    = (stored.totalXP || 0) + STATE.sessionXP;
+  // prevent double-counting if already saved via awardXP
+  // recalc from scratch each session end
+  stored.lastScore  = STATE.finalScore;
+  stored.level      = getLevel(stored.totalXP || 0).name;
+  stored.sessions   = (stored.sessions || 0) + 1;
+  stored.achievements = buildAchievementStatus(stored);
+  saveStorage(stored);
+}
+
+/** Check and return earned achievement IDs */
+function buildAchievementStatus(stored) {
+  const prev = stored.achievements || {};
+  const earned = { ...prev };
+
+  if (stored.sessions >= 1)                       earned.first_run = true;
+  if ((stored.lastScore || 0) > 80)               earned.score_80  = true;
+  if (STATE.challengeScores.length >= 10 &&
+      STATE.challengeScores.every(s => s >= 7))   earned.all_perfect = true;
+  if ((stored.totalXP || 0) >= 100)               earned.xp_100    = true;
+  if (STATE.quizCorrect === 10)                   earned.perfect_quiz = true;
+
+  return earned;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   4d. TIMER SYSTEM
+══════════════════════════════════════════════════════════════ */
+
+/**
+ * Start a countdown timer
+ * @param {number}   seconds   — total seconds
+ * @param {string}   valId     — id of the <span> showing mm:ss
+ * @param {string}   wrapId    — id of the .timer-display wrapper
+ * @param {Function} onExpire  — called when reaches 0
+ * @returns {number} interval ID
+ */
+function startTimer(seconds, valId, wrapId, onExpire) {
+  let remaining = seconds;
+  const valEl  = document.getElementById(valId);
+  const wrapEl = document.getElementById(wrapId);
+
+  function tick() {
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    valEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+
+    // Visual warnings
+    wrapEl.classList.remove('warning', 'danger');
+    if (remaining <= 30)       wrapEl.classList.add('danger');
+    else if (remaining <= 90)  wrapEl.classList.add('warning');
+
+    if (remaining <= 0) {
+      clearInterval(id);
+      onExpire();
+    }
+    remaining--;
+  }
+
+  tick(); // immediate first render
+  const id = setInterval(tick, 1000);
+  return id;
+}
+
+function stopTimer(id) {
+  if (id) clearInterval(id);
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   4e. CODE RUNNER (simulated test cases)
+══════════════════════════════════════════════════════════════ */
+
+/**
+ * Test case definitions per challenge name.
+ * Each test: { label, keywords: [], desc }
+ * "keywords" = strings that must appear in user's code for pass.
+ */
+const TEST_CASES = {
+  ft_strlen: [
+    { label: "Uses a loop",         keywords: ["while", "for"],         desc: "Solution must loop through characters" },
+    { label: "Checks '\\0'",        keywords: ["\\0", "!= 0", "!= '\\0'", "len"],  desc: "Must detect null terminator" },
+    { label: "Returns a counter",   keywords: ["return"],               desc: "Must return the computed length" }
+  ],
+  ft_putstr: [
+    { label: "Includes unistd.h",   keywords: ["unistd"],               desc: "Needs #include <unistd.h> for write()" },
+    { label: "Calls write()",       keywords: ["write"],                 desc: "Must use write() to output characters" },
+    { label: "Loops the string",    keywords: ["while", "for"],         desc: "Must iterate over string characters" }
+  ],
+  reverse_string: [
+    { label: "Two index variables", keywords: ["left", "right", "i", "j"], desc: "Needs two pointers/indices" },
+    { label: "Swaps characters",    keywords: ["tmp", "temp", "swap"],  desc: "Must use a temp variable to swap" },
+    { label: "Returns string",      keywords: ["return"],               desc: "Must return the modified string" }
+  ],
+  first_last_char: [
+    { label: "Checks argc",         keywords: ["argc"],                 desc: "Must validate argument count" },
+    { label: "Accesses argv[1]",    keywords: ["argv"],                 desc: "Must read command-line argument" },
+    { label: "Prints characters",   keywords: ["printf", "write", "putchar"], desc: "Must print first and last char" }
+  ],
+  repeat_alpha: [
+    { label: "Checks if letter",    keywords: ["alpha", ">= 'a'", ">= 'A'", "isalpha"], desc: "Must detect alphabetic chars" },
+    { label: "Calculates repeat",   keywords: ["- 'a'", "- 'A'"],      desc: "Position computed with char arithmetic" },
+    { label: "Inner loop",          keywords: ["while", "for"],        desc: "Uses nested loop for repetition" }
+  ],
+  rot13: [
+    { label: "Handles a-m",         keywords: ["'m'", "'M'", "<= 'm'", "<= 'M'"], desc: "Must handle first half of alphabet" },
+    { label: "Applies +13 or -13",  keywords: ["13"],                  desc: "Rotation by 13 positions" },
+    { label: "Returns string",      keywords: ["return"],               desc: "Returns the encoded string" }
+  ],
+  swap: [
+    { label: "Uses pointers",       keywords: ["*a", "*b"],             desc: "Must dereference pointer params" },
+    { label: "Uses temp variable",  keywords: ["tmp", "temp"],          desc: "Needs a temporary variable for swap" },
+    { label: "Assigns both sides",  keywords: ["*a =", "*b ="],        desc: "Both values must be reassigned" }
+  ],
+  ft_max: [
+    { label: "Compares a and b",    keywords: ["a > b", "b > a", "a >= b"], desc: "Must compare the two integers" },
+    { label: "Returns a value",     keywords: ["return"],               desc: "Must return the maximum" },
+    { label: "No printf",           keywords: [],                       desc: "Function, not a program — no printf needed", inverted: true, inv_keywords: [] }
+  ],
+  print_numbers: [
+    { label: "Loops 0 to 9",        keywords: ["0", "9", "while", "for"],  desc: "Must iterate 10 times" },
+    { label: "Outputs digits",      keywords: ["write", "printf", "putchar"], desc: "Must output each digit" },
+    { label: "Handles spacing",     keywords: [" "],                    desc: "Digits separated by spaces" }
+  ],
+  ulstr: [
+    { label: "Checks lowercase",    keywords: [">= 'a'", "<= 'z'"],    desc: "Detects lowercase letters" },
+    { label: "Checks uppercase",    keywords: [">= 'A'", "<= 'Z'"],    desc: "Detects uppercase letters" },
+    { label: "Case conversion",     keywords: ["-= 32", "+= 32", "- 32", "+ 32"], desc: "Converts case with ±32" }
+  ],
+  ft_strcpy: [
+    { label: "Copies bytes",        keywords: ["dst[i]", "dst["],       desc: "Writes into destination array" },
+    { label: "Copies null term",    keywords: ["\\0", "'\\0'"],         desc: "Must copy the null terminator" },
+    { label: "Returns dst",         keywords: ["return"],               desc: "Returns the destination pointer" }
+  ],
+  ft_isalpha: [
+    { label: "Checks a-z range",    keywords: [">= 'a'", "<= 'z'"],    desc: "Validates lowercase range" },
+    { label: "Checks A-Z range",    keywords: [">= 'A'", "<= 'Z'"],    desc: "Validates uppercase range" },
+    { label: "Returns 1 or 0",      keywords: ["return (1)", "return 1", "return (0)", "return 0"], desc: "Returns boolean result" }
+  ],
+  ft_atoi: [
+    { label: "Skips whitespace",    keywords: ["' '", "9", "13", "isspace"], desc: "Handles leading whitespace" },
+    { label: "Handles sign",        keywords: ["'-'", "sign", "-1"],    desc: "Detects + or - prefix" },
+    { label: "Converts digits",     keywords: ["'0'", "- '0'", "* 10"], desc: "Digit conversion formula" }
+  ],
+  ft_memset: [
+    { label: "Casts to uchar*",     keywords: ["unsigned char"],        desc: "Must cast void* to unsigned char*" },
+    { label: "Loops n times",       keywords: ["while", "for"],        desc: "Must fill exactly n bytes" },
+    { label: "Returns s",           keywords: ["return"],               desc: "Must return the original pointer" }
+  ],
+  count_words: [
+    { label: "Tracks word state",   keywords: ["in_word", "word", "state", "flag"], desc: "Uses a flag to track word state" },
+    { label: "Detects whitespace",  keywords: ["' '", "'\\t'", "'\\n'"], desc: "Handles space, tab, newline" },
+    { label: "Counts transitions",  keywords: ["count", "++"],          desc: "Increments on each new word" }
+  ]
+};
+
+/**
+ * Simulate running test cases against user's code
+ */
+function runCode() {
+  const code = document.getElementById('code-input').value.trim();
+  const ch   = STATE.challengePool[STATE.challengeIndex];
+  const tests = TEST_CASES[ch.name] || [];
+
+  const outputEl = document.getElementById('run-output');
+  const casesEl  = document.getElementById('run-cases');
+  const statusEl = document.getElementById('run-status');
+
+  outputEl.classList.remove('hidden');
+  casesEl.innerHTML = '';
+
+  if (code.length < 10) {
+    statusEl.textContent = '⚠ EMPTY';
+    statusEl.style.color = 'var(--warn)';
+    casesEl.innerHTML = `<div class="test-case fail"><span class="test-icon">⚠</span><div class="test-info"><span class="test-name">NO CODE</span><span class="test-detail">Write something first!</span></div></div>`;
+    return;
+  }
+
+  let passed = 0;
+
+  tests.forEach((test, i) => {
+    const delay = i * 180;
+    setTimeout(() => {
+      let ok;
+      if (test.inverted) {
+        // inverted: pass if NONE of inv_keywords present
+        ok = !test.inv_keywords.some(kw => code.includes(kw));
+      } else {
+        // pass if at least one keyword present
+        ok = test.keywords.length === 0 || test.keywords.some(kw => code.includes(kw));
+      }
+
+      if (ok) passed++;
+
+      const div = document.createElement('div');
+      div.className = `test-case ${ok ? 'pass' : 'fail'}`;
+      div.innerHTML = `
+        <span class="test-icon">${ok ? '✅' : '❌'}</span>
+        <div class="test-info">
+          <span class="test-name">TEST ${i + 1}: ${test.label}</span>
+          <span class="test-detail">${test.desc}</span>
+        </div>
+      `;
+      casesEl.appendChild(div);
+
+      // Update status after last test
+      if (i === tests.length - 1) {
+        const allPassed = passed === tests.length;
+        statusEl.textContent = `${passed}/${tests.length} PASSED`;
+        statusEl.style.color = allPassed ? 'var(--good)' : passed > 0 ? 'var(--warn)' : 'var(--danger)';
+
+        // Auto-set self-grade if not set
+        if (!STATE.selfGrade) {
+          if (allPassed)       setSelfGrade('perfect');
+          else if (passed > 0) setSelfGrade('almost');
+          else                 setSelfGrade('struggled');
+        }
+      }
+    }, delay);
+  });
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   4f. ACHIEVEMENTS
+══════════════════════════════════════════════════════════════ */
+
+const ACHIEVEMENTS_DEF = [
+  { id: 'first_run',    icon: '🚀', name: 'FIRST RUN',    desc: 'Completed your first evaluation' },
+  { id: 'score_80',     icon: '🎯', name: 'SHARPSHOOTER', desc: 'Scored above 80/100' },
+  { id: 'all_perfect',  icon: '💎', name: 'FLAWLESS',     desc: 'All 10 challenges rated Perfect/Almost' },
+  { id: 'xp_100',       icon: '⚡', name: '100 XP',       desc: 'Accumulated 100+ total XP' },
+  { id: 'perfect_quiz', icon: '🧠', name: 'BIG BRAIN',    desc: 'Got 10/10 on the quiz' }
+];
+
+function renderAchievements() {
+  const stored = loadStorage();
+  // Run build now to include current session
+  const earned = buildAchievementStatus(stored);
+
+  const grid = document.getElementById('achievements-grid');
+  grid.innerHTML = ACHIEVEMENTS_DEF.map(a => `
+    <div class="achievement-pill ${earned[a.id] ? 'earned' : ''}">
+      <span class="ach-icon">${a.icon}</span>
+      <div class="ach-info">
+        <span class="ach-name">${a.name}</span>
+        <span class="ach-desc">${a.desc}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   4g. WEAKNESS DETECTION
+══════════════════════════════════════════════════════════════ */
+
+/**
+ * Map challenge names to conceptual topics for weakness tracking
+ */
+const CHALLENGE_TOPICS = {
+  ft_strlen:     'STRINGS',
+  ft_putstr:     'I/O',
+  reverse_string:'STRINGS',
+  first_last_char:'ARGC/ARGV',
+  repeat_alpha:  'STRINGS',
+  rot13:         'STRINGS',
+  swap:          'POINTERS',
+  ft_max:        'FUNCTIONS',
+  print_numbers: 'LOOPS',
+  ulstr:         'STRINGS',
+  ft_strcpy:     'STRINGS',
+  ft_isalpha:    'BASICS',
+  ft_atoi:       'STRINGS',
+  ft_memset:     'MEMORY',
+  count_words:   'STRINGS'
+};
+
+/** Render the weakness section based on quiz mistakes + challenge performance */
+function renderWeaknesses() {
+  const listEl = document.getElementById('weakness-list');
+
+  // ── Collect topic scores ─────────────────────────────────────
+  const topicData = {}; // { TOPIC: { correct, total } }
+
+  // From quiz mistakes
+  STATE.quizPool.forEach((q, i) => {
+    const t = q.topic;
+    if (!topicData[t]) topicData[t] = { correct: 0, total: 0 };
+    topicData[t].total++;
+    if (i < STATE.quizIndex) { // answered questions
+      // We stored mistakes in STATE.topicMistakes during quiz
+    }
+  });
+
+  // Use STATE.topicMistakes for quiz weakness
+  const allTopics = {};
+
+  Object.entries(STATE.topicMistakes || {}).forEach(([topic, mistakes]) => {
+    const total = STATE.quizPool.filter(q => q.topic === topic).length;
+    if (total > 0) {
+      const pct = Math.round(((total - mistakes) / total) * 100);
+      allTopics[topic] = pct;
+    }
+  });
+
+  // From challenge scores
+  STATE.challengePool.forEach((ch, i) => {
+    const score = STATE.challengeScores[i] ?? 5;
+    const topic = CHALLENGE_TOPICS[ch.name] || 'GENERAL';
+    const pct   = Math.round((score / 10) * 100);
+
+    if (allTopics[topic] === undefined) {
+      allTopics[topic] = pct;
+    } else {
+      allTopics[topic] = Math.round((allTopics[topic] + pct) / 2);
+    }
+  });
+
+  if (Object.keys(allTopics).length === 0) {
+    listEl.innerHTML = `<p class="weakness-no-issues">✅ Not enough data — complete the full evaluation for detailed analysis.</p>`;
+    return;
+  }
+
+  // Sort: worst first
+  const sorted = Object.entries(allTopics).sort((a, b) => a[1] - b[1]);
+
+  listEl.innerHTML = sorted.map(([topic, pct]) => {
+    const cls = pct < 50 ? 'weak' : pct < 75 ? 'medium' : 'strong';
+    const label = pct < 50 ? '🔴 Needs work' : pct < 75 ? '🟡 Improving' : '🟢 Strong';
+    return `
+      <div class="weakness-row">
+        <div class="weakness-label">
+          <span class="weakness-name" style="color: var(--${cls === 'weak' ? 'danger' : cls === 'medium' ? 'warn' : 'good'})">${topic}</span>
+          <span class="weakness-pct">${pct}% — ${label}</span>
+        </div>
+        <div class="weakness-bar-track">
+          <div class="weakness-bar-fill ${cls}" style="width:${pct}%"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+
+/* ══════════════════════════════════════════════════════════════
    5. QUIZ LOGIC
 ══════════════════════════════════════════════════════════════ */
 
 /** Initialize quiz state and render first question */
 function initQuiz() {
-  STATE.quizPool    = shuffle(QUESTION_POOL).slice(0, 10);
-  STATE.quizIndex   = 0;
-  STATE.quizCorrect = 0;
+  STATE.quizPool      = shuffle(QUESTION_POOL).slice(0, 10);
+  STATE.quizIndex     = 0;
+  STATE.quizCorrect   = 0;
+  STATE.topicMistakes = {};
+  STATE.sessionXP     = 0;
+
+  // Start quiz timer (5 minutes)
+  stopTimer(STATE.quizTimerID);
+  STATE.quizSecondsLeft = 300;
+  STATE.quizTimerID = startTimer(
+    STATE.quizSecondsLeft,
+    'quiz-timer-val',
+    'quiz-timer',
+    () => { endQuiz(); } // auto-finish on expire
+  );
+
   renderQuestion();
 }
 
@@ -782,9 +1241,13 @@ function handleQuizAnswer(selected) {
   buttons[correct].classList.add('correct');
   if (selected !== correct) {
     buttons[selected].classList.add('wrong');
+    // Track mistake for weakness detection
+    STATE.topicMistakes[q.topic] = (STATE.topicMistakes[q.topic] || 0) + 1;
   } else {
     STATE.quizCorrect++;
     document.getElementById('quiz-score-live').textContent = `${STATE.quizCorrect} / 10`;
+    // Award XP for correct answer
+    awardXP(5, 'correct quiz answer');
   }
 
   // Show explanation
@@ -808,6 +1271,7 @@ function nextQuestion() {
 
 /** Quiz complete — show interlude */
 function endQuiz() {
+  stopTimer(STATE.quizTimerID);
   STATE.finalQuizScore = STATE.quizCorrect;
 
   // Interlude messages
@@ -831,10 +1295,21 @@ function endQuiz() {
 
 /** Initialize challenge phase */
 function startChallenges() {
-  STATE.challengePool  = shuffle(CHALLENGE_POOL).slice(0, 10);
-  STATE.challengeIndex = 0;
-  STATE.challengeScores = [];
-  STATE.selfGrade = null;
+  STATE.challengePool    = shuffle(CHALLENGE_POOL).slice(0, 10);
+  STATE.challengeIndex   = 0;
+  STATE.challengeScores  = [];
+  STATE.challengeWeakness = [];
+  STATE.selfGrade        = null;
+
+  // Start challenge timer (30 minutes)
+  stopTimer(STATE.codeTimerID);
+  STATE.codeSecondsLeft = 1800;
+  STATE.codeTimerID = startTimer(
+    STATE.codeSecondsLeft,
+    'code-timer-val',
+    'code-timer',
+    () => { endChallenges(); } // auto-finish on expire
+  );
 
   showScreen('screen-challenges');
   renderChallenge();
@@ -886,8 +1361,9 @@ function renderChallenge() {
   document.querySelectorAll('.sg-btn').forEach(b => b.classList.remove('selected'));
   STATE.selfGrade = null;
 
-  // Hide solution
+  // Hide solution and run output
   document.getElementById('solution-reveal').classList.add('hidden');
+  document.getElementById('run-output').classList.add('hidden');
 
   // Card animation
   const card = document.querySelector('.challenge-card');
@@ -942,6 +1418,18 @@ function nextChallenge() {
   const pts = scoreChallenge();
   STATE.challengeScores.push(pts);
 
+  // Award XP for perfect challenges
+  if (STATE.selfGrade === 'perfect') awardXP(10, 'perfect challenge');
+  else if (STATE.selfGrade === 'almost') awardXP(5, 'almost challenge');
+
+  // Track weakness data
+  const ch = STATE.challengePool[STATE.challengeIndex];
+  STATE.challengeWeakness.push({
+    name:  ch.name,
+    topic: CHALLENGE_TOPICS[ch.name] || 'GENERAL',
+    score: pts
+  });
+
   STATE.challengeIndex++;
   if (STATE.challengeIndex >= STATE.challengePool.length) {
     endChallenges();
@@ -952,10 +1440,10 @@ function nextChallenge() {
 
 /** Challenge phase complete → compute results */
 function endChallenges() {
+  stopTimer(STATE.codeTimerID);
   STATE.finalCodeScore = STATE.challengeScores.reduce((a, b) => a + b, 0);
 
   // Final score: quiz=0-10 → convert to 0-50, code=0-100 → 0-50
-  // Formula: (quizScore/10 * 50) + (codeScore/100 * 50)
   const quizPct  = (STATE.finalQuizScore / 10) * 50;
   const codePct  = (STATE.finalCodeScore / 100) * 50;
   STATE.finalScore = Math.round(quizPct + codePct);
@@ -988,7 +1476,6 @@ function showResults() {
 
   // ── Rating ───────────────────────────────────────────────────
   let emoji, ratingText;
-
   if (total < 40) {
     emoji      = '💀';
     ratingText = 'oh hellll nah twin 💀';
@@ -999,12 +1486,14 @@ function showResults() {
     emoji      = '🐐🔥';
     ratingText = 'u r the goat 🐐🔥';
   }
-
   document.getElementById('rating-emoji').textContent = emoji;
   document.getElementById('rating-text').textContent  = ratingText;
 
-  // ── Coach ────────────────────────────────────────────────────
-  buildCoachSection(total);
+  // ── New systems ───────────────────────────────────────────────
+  persistSession();         // save to localStorage
+  renderAchievements();     // achievements panel
+  renderWeaknesses();       // weakness detection panel
+  buildCoachSection(total); // coach (now uses weakness data too)
 }
 
 /**
@@ -1014,11 +1503,28 @@ function showResults() {
 function buildCoachSection(score) {
   let tierTag, verdict, roadmapSteps, exercises;
 
+  // Collect weak topics for personalized advice
+  const weakTopics = Object.entries(STATE.topicMistakes || {})
+    .filter(([, mistakes]) => mistakes > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([topic]) => topic);
+
+  const weakChallenges = (STATE.challengeWeakness || [])
+    .filter(c => c.score < 5)
+    .map(c => c.name);
+
+  const weakSummary = weakTopics.length > 0
+    ? `Based on your answers, your weakest areas are: <strong>${weakTopics.join(', ')}</strong>.`
+    : '';
+
   if (score < 40) {
     /* ────────── LOW ────────── */
     tierTag = '// COACH SAYS — BRUTALLY HONEST 🔴';
 
-    verdict = `Look. ${score}/100 is not where you want to be. And I'm not going to sugarcoat it — you have real gaps in your fundamentals. The good news? Fundamentals can be fixed, but only if you stop guessing and start actually understanding. You need to rebuild from zero. No shortcuts. No copy-paste. Every line you write, you should be able to explain why.`;
+    verdict = `Look. ${score}/100 is not where you want to be. And I'm not going to sugarcoat it — ` +
+      `you have real gaps in your fundamentals. ${weakSummary} ` +
+      `The good news? Fundamentals can be fixed, but only if you stop guessing and start actually understanding. ` +
+      `You need to rebuild from zero. No shortcuts. No copy-paste. Every line you write, you should be able to explain why.`;
 
     roadmapSteps = [
       "Drill variables, data types, and operators until you can write them in your sleep. No IDE autocomplete. No AI help.",
@@ -1029,16 +1535,27 @@ function buildCoachSection(score) {
       "Do NOT move on until you can write ft_strlen and ft_putchar from memory with zero bugs."
     ];
 
+    // Personalize based on weak topics
+    if (weakTopics.includes('POINTERS'))
+      roadmapSteps.push("Pointers: draw memory diagrams. Every pointer concept needs a picture before it becomes code.");
+    if (weakTopics.includes('ARGC / ARGV'))
+      roadmapSteps.push("argc/argv: write 3 programs that parse command-line args today. This is non-negotiable at 42.");
+
     exercises = [
       "print alphabet (a→z)", "ft_putchar", "ft_strlen", "is_positive",
-      "print numbers 0-9", "ft_isalpha", "count vowels", "simple loop drills"
-    ];
+      "print numbers 0-9", "ft_isalpha", "count vowels", "simple loop drills",
+      ...weakChallenges.slice(0, 3)
+    ].filter((v, i, a) => a.indexOf(v) === i); // dedupe
 
   } else if (score < 75) {
     /* ────────── MEDIUM ────────── */
     tierTag = '// COACH SAYS — HONEST AND PUSHING 🟡';
 
-    verdict = `${score}/100. You're not bad, but you're not solid either. You know enough to get by, but "getting by" doesn't pass 42 evaluations. The gaps are real — pointers confuse you, edge cases catch you off guard, and your solutions probably work for the happy path but fall apart when tested properly. That changes now. Stop being comfortable.`;
+    verdict = `${score}/100. You're not bad, but you're not solid either. ${weakSummary} ` +
+      `You know enough to get by, but "getting by" doesn't pass 42 evaluations. ` +
+      `The gaps are real — pointers confuse you, edge cases catch you off guard, ` +
+      `and your solutions probably work for the happy path but fall apart when tested properly. ` +
+      `That changes now. Stop being comfortable.`;
 
     roadmapSteps = [
       "Pointers are your weak spot. Spend one full week doing nothing but pointer exercises. Draw memory diagrams if needed.",
@@ -1049,16 +1566,34 @@ function buildCoachSection(score) {
       "Debug by adding printf() calls systematically. Understand the flow before assuming where the bug is."
     ];
 
+    if (weakTopics.includes('ARRAYS & STRINGS'))
+      roadmapSteps.push("Strings: you're shaky here. Master ft_strcpy, ft_strcat, ft_strcmp from scratch — no looking.");
+    if (weakTopics.includes('FUNCTIONS'))
+      roadmapSteps.push("Functions: rewrite every function you know from memory. If you can't, you don't know it.");
+
+    // Add specific challenges they struggled with
+    if (weakChallenges.length > 0)
+      roadmapSteps.push(`Redo these specific challenges until you nail them: ${weakChallenges.slice(0, 4).join(', ')}.`);
+
     exercises = [
       "ft_atoi", "ft_strcpy", "swap", "rot13", "repeat_alpha",
-      "argc/argv exercises", "ft_memset", "string manipulation", "valgrind practice"
-    ];
+      "argc/argv exercises", "ft_memset", "string manipulation", "valgrind practice",
+      ...weakChallenges.slice(0, 3)
+    ].filter((v, i, a) => a.indexOf(v) === i);
 
   } else {
     /* ────────── HIGH ────────── */
     tierTag = '// COACH SAYS — PUSHING HIGHER 🟢';
 
-    verdict = `${score}/100. Strong work — you actually know what you're doing. But here's the thing: knowing C basics is just the floor, not the ceiling. If you stop here, you'll plateau fast. The real growth happens when you build things that are complex enough to break you, when you read other people's good code, and when you start optimizing instead of just "making it work." You ready to level up for real?`;
+    const remainingWeak = weakTopics.length > 0
+      ? ` One note: even at your level, don't ignore ${weakTopics[0]} — a gap there will cost you in real projects.`
+      : ' Your fundamentals are clean across the board — rare.';
+
+    verdict = `${score}/100. Strong work — you actually know what you're doing.${remainingWeak} ` +
+      `But here's the thing: knowing C basics is just the floor, not the ceiling. ` +
+      `If you stop here, you'll plateau fast. The real growth happens when you build things that are ` +
+      `complex enough to break you, when you read other people's good code, and when you start ` +
+      `optimizing instead of just "making it work." You ready to level up for real?`;
 
     roadmapSteps = [
       "Build a mini shell in C — handle fork(), exec(), waitpid(), and redirections. It will expose everything you don't know.",
@@ -1077,7 +1612,7 @@ function buildCoachSection(score) {
 
   // Inject into DOM
   document.getElementById('coach-tier-tag').textContent = tierTag;
-  document.getElementById('coach-verdict').textContent  = verdict;
+  document.getElementById('coach-verdict').innerHTML    = verdict;
 
   // Roadmap
   const roadmapEl = document.getElementById('coach-roadmap');
@@ -1116,23 +1651,35 @@ function startSession() {
 
 /** Restart everything — called by "Train Again" */
 function trainAgain() {
+  // Stop any running timers
+  stopTimer(STATE.quizTimerID);
+  stopTimer(STATE.codeTimerID);
+
   // Reset all state
-  STATE.quizPool        = [];
-  STATE.quizIndex       = 0;
-  STATE.quizCorrect     = 0;
-  STATE.quizAnswered    = false;
-  STATE.challengePool   = [];
-  STATE.challengeIndex  = 0;
-  STATE.challengeScores = [];
-  STATE.selfGrade       = null;
-  STATE.finalQuizScore  = 0;
-  STATE.finalCodeScore  = 0;
-  STATE.finalScore      = 0;
+  STATE.quizPool          = [];
+  STATE.quizIndex         = 0;
+  STATE.quizCorrect       = 0;
+  STATE.quizAnswered      = false;
+  STATE.challengePool     = [];
+  STATE.challengeIndex    = 0;
+  STATE.challengeScores   = [];
+  STATE.challengeWeakness = [];
+  STATE.selfGrade         = null;
+  STATE.finalQuizScore    = 0;
+  STATE.finalCodeScore    = 0;
+  STATE.finalScore        = 0;
+  STATE.topicMistakes     = {};
+  STATE.sessionXP         = 0;
+  STATE.quizTimerID       = null;
+  STATE.codeTimerID       = null;
 
   // Reset progress bars
   setProgress('quiz-progress', 'quiz-progress-label', 0);
   setProgress('code-progress', 'code-progress-label', 0);
   document.getElementById('final-bar').style.width = '0%';
+
+  // Refresh XP panel with updated stored data
+  renderXPPanel();
 
   showScreen('screen-landing');
 }
@@ -1145,6 +1692,9 @@ function trainAgain() {
 document.addEventListener('DOMContentLoaded', () => {
   // Show landing screen on load
   showScreen('screen-landing');
+
+  // Render XP panel from localStorage on boot
+  renderXPPanel();
 
   // Tab key support inside code editor
   const codeInput = document.getElementById('code-input');

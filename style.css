@@ -877,3 +877,308 @@ body {
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ═══════════════════════════════════════════════════════════════
+   ADDITIONS v3.0 — Timer, XP, Run Code, Achievements, Weaknesses
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Timer ──────────────────────────────────────────────────── */
+.timer-display {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-family: var(--display);
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--text);
+  transition: color .3s, border-color .3s, background .3s;
+}
+
+.timer-icon { font-size: .8rem; }
+.timer-val  { letter-spacing: .06em; }
+
+.timer-display.warning {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: rgba(255,189,46,.07);
+  animation: timerPulse 1s ease infinite;
+}
+
+.timer-display.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(255,69,69,.08);
+  animation: timerPulse .5s ease infinite;
+}
+
+@keyframes timerPulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: .6; }
+}
+
+/* ── XP bar (landing) ───────────────────────────────────────── */
+.xp-panel {
+  width: 100%; max-width: 480px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+}
+
+.xp-top-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+
+.xp-level-label {
+  font-family: var(--display);
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .2em;
+  color: var(--accent-coach);
+}
+
+.xp-pts {
+  font-family: var(--mono);
+  font-size: .8rem;
+  color: var(--accent-quiz);
+}
+
+.xp-bar-track {
+  height: 6px;
+  background: var(--card-border);
+  border-radius: 100px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.xp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-coach), var(--accent-quiz));
+  border-radius: 100px;
+  width: 0%;
+  transition: width .8s cubic-bezier(.4,0,.2,1);
+}
+
+.xp-history {
+  font-size: .72rem;
+  color: var(--text-dim);
+}
+
+/* ── XP live badge in top bar ───────────────────────────────── */
+.xp-live-badge {
+  font-family: var(--display);
+  font-size: .62rem;
+  font-weight: 700;
+  color: var(--accent-coach);
+  background: rgba(192,132,252,.1);
+  border: 1px solid rgba(192,132,252,.2);
+  padding: 3px 9px;
+  border-radius: 100px;
+  letter-spacing: .08em;
+  transition: transform .2s;
+}
+
+.xp-live-badge.pop {
+  animation: xpPop .4s ease;
+}
+
+@keyframes xpPop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.35); color: #fff; }
+  100% { transform: scale(1); }
+}
+
+/* ── Run Code button ────────────────────────────────────────── */
+.btn-run {
+  background: transparent;
+  border: 1px solid var(--accent-code);
+  color: var(--accent-code);
+  font-family: var(--display);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  padding: 12px 22px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.btn-run:hover {
+  background: rgba(57,255,20,.1);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(57,255,20,.2);
+}
+
+.btn-run:active {
+  transform: scale(.96);
+}
+
+/* ── Run output ─────────────────────────────────────────────── */
+.run-output {
+  background: #060d04;
+  border: 1px solid rgba(57,255,20,.15);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 16px;
+  animation: cardIn .3s ease;
+}
+
+.run-output-header {
+  display: flex; justify-content: space-between; align-items: center;
+  background: #0a130a;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(57,255,20,.1);
+  font-size: .72rem;
+  color: var(--text-dim);
+  letter-spacing: .06em;
+}
+
+.run-status {
+  font-family: var(--display);
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+
+.run-cases {
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.test-case {
+  display: flex; align-items: flex-start; gap: 12px;
+  font-family: var(--mono);
+  font-size: .8rem;
+  line-height: 1.55;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+  border: 1px solid transparent;
+  animation: cardIn .3s ease both;
+}
+
+.test-case.pass {
+  border-color: rgba(57,255,20,.2);
+  background: rgba(57,255,20,.04);
+}
+
+.test-case.fail {
+  border-color: rgba(255,69,69,.2);
+  background: rgba(255,69,69,.04);
+}
+
+.test-icon { font-size: 1rem; flex-shrink: 0; }
+
+.test-info { display: flex; flex-direction: column; gap: 3px; }
+.test-name { color: var(--text-dim); font-size: .72rem; letter-spacing: .06em; }
+.test-detail { color: var(--text); font-size: .78rem; }
+.test-detail span { color: var(--text-dim); }
+
+/* ── Achievements ───────────────────────────────────────────── */
+.achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.achievement-pill {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--surface);
+  transition: transform .2s;
+}
+
+.achievement-pill.earned {
+  border-color: rgba(255,189,46,.3);
+  background: rgba(255,189,46,.06);
+  animation: achieveIn .5s ease both;
+}
+
+@keyframes achieveIn {
+  from { opacity: 0; transform: scale(.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.achievement-pill:not(.earned) { opacity: .35; filter: grayscale(1); }
+
+.ach-icon { font-size: 1.4rem; flex-shrink: 0; }
+
+.ach-info { display: flex; flex-direction: column; gap: 2px; }
+.ach-name { font-family: var(--display); font-size: .62rem; font-weight: 700; letter-spacing: .1em; color: var(--warn); }
+.ach-desc { font-size: .7rem; color: var(--text-dim); line-height: 1.4; }
+
+/* ── Weakness detection ─────────────────────────────────────── */
+.weakness-card { border-color: rgba(255,69,69,.15); }
+
+.weakness-list {
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.weakness-row {
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.weakness-label {
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+.weakness-name {
+  font-family: var(--display);
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+
+.weakness-pct {
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--text-dim);
+}
+
+.weakness-bar-track {
+  height: 5px;
+  background: var(--card-border);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.weakness-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 1s cubic-bezier(.4,0,.2,1);
+}
+
+.weakness-bar-fill.weak   { background: var(--danger); }
+.weakness-bar-fill.medium { background: var(--warn); }
+.weakness-bar-fill.strong { background: var(--good); }
+
+.weakness-no-issues {
+  font-size: .85rem;
+  color: var(--accent-code);
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Button ripple (micro-interaction) ──────────────────────── */
+.btn-next, .btn-start, .btn-run, .btn-ghost, .sg-btn, .opt-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-next::after, .btn-start::after, .btn-run::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,.08);
+  opacity: 0;
+  transition: opacity .15s;
+}
+
+.btn-next:active::after, .btn-start:active::after, .btn-run:active::after {
+  opacity: 1;
+}
