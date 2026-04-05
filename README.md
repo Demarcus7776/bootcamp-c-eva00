@@ -57,7 +57,7 @@ A modern web app to test and improve your C programming skills, inspired by the 
 1. Clone the repo:
 
 ```bash
-git clone https://github.com/your-username/42-c-trainer.git
+https://github.com/Demarcus7776/bootcamp-c-eva00.git
 ```
 
 2. Open:
