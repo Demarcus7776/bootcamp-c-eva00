@@ -872,6 +872,11 @@ body {
   .ch-actions .btn-next, .ch-actions .btn-ghost { width: 100%; text-align: center; justify-content: center; }
 }
 
+/* ── Top score row (score + XP badge together) ──────────────── */
+.top-score-row {
+  display: flex; align-items: center; gap: 8px;
+}
+
 /* ── Scrollbar styling ──────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
@@ -1182,3 +1187,61 @@ body {
 .btn-next:active::after, .btn-start:active::after, .btn-run:active::after {
   opacity: 1;
 }
+
+/* ── Syntax highlighting overlay editor ─────────────────────── */
+.editor-highlight-wrap {
+  position: relative;
+  background: #0a0d12;
+}
+
+.editor-highlight {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 18px;
+  font-family: var(--mono);
+  font-size: .84rem;
+  line-height: 1.75;
+  tab-size: 4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow: hidden;
+  pointer-events: none;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.editor-highlight code {
+  font-family: var(--mono);
+  font-size: inherit;
+  line-height: inherit;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* Transparent textarea floats on top — caret visible, text hidden */
+#code-input {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+  color: transparent !important;
+  caret-color: var(--accent-code) !important;
+}
+
+/* Prism token colors — tuned to match terminal palette */
+.editor-highlight .token.comment,
+.editor-highlight .token.prolog     { color: #4a5a70; font-style: italic; }
+.editor-highlight .token.keyword    { color: #00c8ff; font-weight: bold; }
+.editor-highlight .token.string     { color: #ffbd2e; }
+.editor-highlight .token.number     { color: #ff6b35; }
+.editor-highlight .token.function   { color: #39ff14; }
+.editor-highlight .token.operator   { color: #c084fc; }
+.editor-highlight .token.punctuation{ color: #8899aa; }
+.editor-highlight .token.macro-name,
+.editor-highlight .token.directive-hash,
+.editor-highlight .token.directive  { color: #c084fc; }
+.editor-highlight .token.boolean,
+.editor-highlight .token.constant   { color: #ff6b35; }

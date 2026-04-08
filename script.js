@@ -751,7 +751,7 @@ function awardXP(amount, reason) {
   STATE.sessionXP += amount;
   const stored = loadStorage();
   stored.totalXP = (stored.totalXP || 0) + amount;
-  stored.lastScore = STATE.finalScore || stored.lastScore || 0;
+  // Don't touch lastScore here — it gets set properly at session end
   saveStorage(stored);
   updateXPBadge();
 }
@@ -809,9 +809,8 @@ function saveStorage(data) {
 /** Persist end-of-session data */
 function persistSession() {
   const stored = loadStorage();
-  stored.totalXP    = (stored.totalXP || 0) + STATE.sessionXP;
-  // prevent double-counting if already saved via awardXP
-  // recalc from scratch each session end
+  // NOTE: totalXP is already updated incrementally by awardXP() during the session.
+  // We only update non-XP fields here to avoid double-counting.
   stored.lastScore  = STATE.finalScore;
   stored.level      = getLevel(stored.totalXP || 0).name;
   stored.sessions   = (stored.sessions || 0) + 1;
@@ -824,7 +823,7 @@ function buildAchievementStatus(stored) {
   const prev = stored.achievements || {};
   const earned = { ...prev };
 
-  if (stored.sessions >= 1)                       earned.first_run = true;
+  if ((stored.sessions || 0) >= 1 || STATE.finalScore >= 0) earned.first_run = true; // always earn on first completion
   if ((stored.lastScore || 0) > 80)               earned.score_80  = true;
   if (STATE.challengeScores.length >= 10 &&
       STATE.challengeScores.every(s => s >= 7))   earned.all_perfect = true;
@@ -1147,11 +1146,18 @@ function renderWeaknesses() {
           <span class="weakness-pct">${pct}% — ${label}</span>
         </div>
         <div class="weakness-bar-track">
-          <div class="weakness-bar-fill ${cls}" style="width:${pct}%"></div>
+          <div class="weakness-bar-fill ${cls}" data-width="${pct}" style="width:0%"></div>
         </div>
       </div>
     `;
   }).join('');
+
+  // Trigger bar animations after paint
+  setTimeout(() => {
+    listEl.querySelectorAll('.weakness-bar-fill[data-width]').forEach(el => {
+      el.style.width = el.dataset.width + '%';
+    });
+  }, 80);
 }
 
 
@@ -1356,6 +1362,8 @@ function renderChallenge() {
 
   // Reset editor
   document.getElementById('code-input').value = '';
+  const hl = document.getElementById('code-highlight');
+  if (hl) hl.innerHTML = '';
 
   // Reset self-grade
   document.querySelectorAll('.sg-btn').forEach(b => b.classList.remove('selected'));
@@ -1698,6 +1706,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Tab key support inside code editor
   const codeInput = document.getElementById('code-input');
+
+  // ── Syntax highlighting sync ────────────────────────────────
+  const codeHighlight = document.getElementById('code-highlight');
+
+  function syncHighlight() {
+    const escaped = codeInput.value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    codeHighlight.innerHTML = escaped;
+    if (window.Prism) Prism.highlightElement(codeHighlight);
+    codeHighlight.parentElement.scrollTop = codeInput.scrollTop;
+  }
+
+  codeInput.addEventListener('input', syncHighlight);
+  codeInput.addEventListener('scroll', () => {
+    codeHighlight.parentElement.scrollTop = codeInput.scrollTop;
+  });
+  // ────────────────────────────────────────────────────────────
+
   codeInput.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
       e.preventDefault();
