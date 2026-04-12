@@ -7,21 +7,16 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Unbounded:wght@400;700;900&display=swap" rel="stylesheet">
-  <!-- Prism.js syntax highlighting -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" />
+
 </head>
 <body>
 
-  <!-- ░░ BACKGROUND GRID ░░ -->
   <div class="bg-grid"></div>
   <div class="bg-scanlines"></div>
 
-  <!-- ░░ APP ROOT ░░ -->
   <div id="app">
 
-    <!-- ════════════════════════════════════
-         SCREEN 0 — LANDING
-    ════════════════════════════════════ -->
+    <!-- SCREEN 0 — LANDING -->
     <section id="screen-landing" class="screen active">
       <div class="landing-inner">
         <div class="logo-row">
@@ -31,7 +26,6 @@
         </div>
         <p class="landing-sub">// evaluate.yourself() — inspired by 42 school</p>
 
-        <!-- ── XP / Level display (populated by JS from localStorage) ── -->
         <div class="xp-panel" id="xp-panel">
           <div class="xp-top-row">
             <span class="xp-level-label" id="xp-level-label">BEGINNER</span>
@@ -44,38 +38,69 @@
         </div>
 
         <div class="landing-stats">
-          <div class="stat-pill"><span class="stat-n">20+</span><span class="stat-l">questions</span></div>
-          <div class="stat-pill"><span class="stat-n">15+</span><span class="stat-l">challenges</span></div>
+          <div class="stat-pill"><span class="stat-n">3</span><span class="stat-l">levels</span></div>
+          <div class="stat-pill"><span class="stat-n">30+</span><span class="stat-l">questions</span></div>
           <div class="stat-pill"><span class="stat-n">100</span><span class="stat-l">points max</span></div>
         </div>
+
         <div class="rules-card">
           <p class="rules-title">HOW IT WORKS</p>
           <ul class="rules-list">
-            <li><span class="pill-tag quiz-tag">QUIZ</span> 10 random C questions — 1pt each</li>
-            <li><span class="pill-tag code-tag">CODE</span> 10 random challenges — 10pts each</li>
+            <li><span class="pill-tag quiz-tag">QUIZ</span> 10 level-specific C questions — 1pt each</li>
+            <li><span class="pill-tag code-tag">CODE</span> 10 level-specific challenges — 10pts each</li>
             <li><span class="pill-tag rate-tag">RATE</span> Get your honest evaluation</li>
             <li><span class="pill-tag coach-tag">COACH</span> Personalized improvement plan</li>
           </ul>
         </div>
-        <button class="btn-start" onclick="startSession()">
-          <span>START EVALUATION</span>
+
+        <button class="btn-start" onclick="showScreen('screen-level-select')">
+          <span>SELECT LEVEL</span>
           <span class="btn-arrow">→</span>
         </button>
       </div>
     </section>
 
-    <!-- ════════════════════════════════════
-         SCREEN 1 — QUIZ
-    ════════════════════════════════════ -->
+    <!-- SCREEN 0b — LEVEL SELECT -->
+    <section id="screen-level-select" class="screen">
+      <div class="level-select-inner">
+        <p class="level-select-title">// SELECT YOUR LEVEL</p>
+        <p class="level-select-sub">Each level has its own questions and challenges. Be honest.</p>
+
+        <div class="level-cards">
+          <div class="level-card level-beginner" onclick="selectLevel('beginner')">
+            <div class="level-card-icon">🟢</div>
+            <div class="level-card-name">BEGINNER</div>
+            <div class="level-card-topics">variables · loops · if/else<br>functions · arrays · basic strings</div>
+            <div class="level-card-cta">START →</div>
+          </div>
+
+          <div class="level-card level-intermediate" onclick="selectLevel('intermediate')">
+            <div class="level-card-icon">🟡</div>
+            <div class="level-card-name">INTERMEDIATE</div>
+            <div class="level-card-topics">pointers · string ops · argc/argv<br>algorithms · edge cases · 42 style</div>
+            <div class="level-card-cta">START →</div>
+          </div>
+
+          <div class="level-card level-expert" onclick="selectLevel('expert')">
+            <div class="level-card-icon">🔴</div>
+            <div class="level-card-name">EXPERT</div>
+            <div class="level-card-topics">hard pointers · memory ops · bit ops<br>complex logic · exam-style</div>
+            <div class="level-card-cta">START →</div>
+          </div>
+        </div>
+
+        <button class="btn-ghost" onclick="showScreen('screen-landing')" style="margin-top:32px">← BACK</button>
+      </div>
+    </section>
+
+    <!-- SCREEN 1 — QUIZ -->
     <section id="screen-quiz" class="screen">
       <div class="top-bar">
-        <span class="top-label quiz-tag">QUIZ PHASE</span>
+        <span class="top-label quiz-tag" id="quiz-level-badge">QUIZ</span>
         <div class="top-score-row">
           <span id="quiz-score-live" class="score-live">0 / 10</span>
-          <!-- XP earned this session -->
           <span class="xp-live-badge" id="quiz-xp-live">+0 XP</span>
         </div>
-        <!-- Timer display -->
         <div class="timer-display" id="quiz-timer">
           <span class="timer-icon">⏱</span>
           <span class="timer-val" id="quiz-timer-val">5:00</span>
@@ -100,9 +125,7 @@
       </div>
     </section>
 
-    <!-- ════════════════════════════════════
-         SCREEN 2 — QUIZ RESULTS (brief)
-    ════════════════════════════════════ -->
+    <!-- SCREEN 2 — QUIZ DONE -->
     <section id="screen-quiz-done" class="screen">
       <div class="interlude-card">
         <p class="interlude-label">QUIZ COMPLETE</p>
@@ -115,17 +138,14 @@
       </div>
     </section>
 
-    <!-- ════════════════════════════════════
-         SCREEN 3 — CHALLENGES
-    ════════════════════════════════════ -->
+    <!-- SCREEN 3 — CHALLENGES -->
     <section id="screen-challenges" class="screen">
       <div class="top-bar">
-        <span class="top-label code-tag">CHALLENGE PHASE</span>
+        <span class="top-label code-tag" id="code-level-badge">CHALLENGE</span>
         <div class="top-score-row">
           <span id="code-score-live" class="score-live">0 / 100</span>
           <span class="xp-live-badge" id="code-xp-live">+0 XP</span>
         </div>
-        <!-- Timer display -->
         <div class="timer-display" id="code-timer">
           <span class="timer-icon">⏱</span>
           <span class="timer-val" id="code-timer-val">30:00</span>
@@ -145,12 +165,10 @@
         </div>
 
         <p class="ch-desc" id="ch-desc"></p>
-
         <div class="examples-block" id="ch-examples"></div>
-
         <div class="hint-block" id="ch-hint"></div>
 
-        <!-- Code editor -->
+        <!-- Monaco real editor -->
         <div class="editor-wrap">
           <div class="editor-topbar">
             <div class="editor-dots">
@@ -159,27 +177,23 @@
               <span class="dot green"></span>
             </div>
             <span class="editor-fname" id="ch-filename">solution.c</span>
+            <span class="editor-lang-tag">C</span>
           </div>
-          <div class="editor-highlight-wrap">
-            <pre class="editor-highlight"><code id="code-highlight" class="language-c"></code></pre>
-            <textarea
-              id="code-input"
-              class="code-area"
-              spellcheck="false"
-              placeholder="#include <stdio.h>&#10;&#10;// write your solution here...&#10;"
-            ></textarea>
-          </div>
+          <div id="monaco-editor-container"></div>
         </div>
 
-        <!-- Self-grade -->
         <div class="self-grade-row">
           <span class="sg-label">How did you do?</span>
           <div class="sg-btns">
-            <button class="sg-btn" id="sg-perfect"  onclick="setSelfGrade('perfect')">✓ Perfect</button>
-            <button class="sg-btn" id="sg-almost"   onclick="setSelfGrade('almost')">~ Almost</button>
+            <button class="sg-btn" id="sg-perfect"   onclick="setSelfGrade('perfect')">✓ Perfect</button>
+            <button class="sg-btn" id="sg-almost"    onclick="setSelfGrade('almost')">~ Almost</button>
             <button class="sg-btn" id="sg-struggled" onclick="setSelfGrade('struggled')">✗ Struggled</button>
-            <button class="sg-btn" id="sg-skipped"  onclick="setSelfGrade('skipped')">⊘ Skipped</button>
+            <button class="sg-btn" id="sg-skipped"   onclick="setSelfGrade('skipped')">⊘ Skipped</button>
           </div>
+        </div>
+        <div class="lock-msg" id="lock-msg">
+          <span class="lock-msg-icon">🔒</span>
+          RATE YOUR ATTEMPT BEFORE ADVANCING
         </div>
 
         <div class="ch-actions">
@@ -188,7 +202,6 @@
           <button class="btn-ghost" onclick="toggleSolution()">👁 SHOW SOLUTION</button>
         </div>
 
-        <!-- Run output area (hidden until RUN is clicked) -->
         <div class="run-output hidden" id="run-output">
           <div class="run-output-header">
             <span>// test results</span>
@@ -204,15 +217,13 @@
       </div>
     </section>
 
-    <!-- ════════════════════════════════════
-         SCREEN 4 — FINAL RESULTS
-    ════════════════════════════════════ -->
+    <!-- SCREEN 4 — RESULTS -->
     <section id="screen-results" class="screen">
       <div class="results-inner">
 
-        <!-- Score breakdown -->
         <div class="card score-breakdown">
           <p class="section-tag">EVALUATION COMPLETE</p>
+          <p class="result-level-tag" id="result-level-tag"></p>
           <div class="score-row-breakdown">
             <div class="score-part">
               <span class="sp-label">Quiz</span>
@@ -229,32 +240,25 @@
               <span class="sp-val final-color" id="res-final">0/100</span>
             </div>
           </div>
-
-          <!-- Animated score bar -->
           <div class="final-bar-track">
             <div class="final-bar-fill" id="final-bar"></div>
           </div>
-
-          <!-- Rating -->
           <div class="rating-display">
             <span class="rating-emoji" id="rating-emoji">🤔</span>
             <p class="rating-text" id="rating-text">Calculating…</p>
           </div>
         </div>
 
-        <!-- Achievements -->
         <div class="card achievements-card" id="achievements-card">
           <p class="section-tag">🏆 ACHIEVEMENTS</p>
           <div class="achievements-grid" id="achievements-grid"></div>
         </div>
 
-        <!-- Weakness detection -->
         <div class="card weakness-card" id="weakness-card">
           <p class="section-tag">🔍 WEAK AREAS DETECTED</p>
           <div class="weakness-list" id="weakness-list"></div>
         </div>
 
-        <!-- Coach card -->
         <div class="card coach-card" id="coach-card">
           <p class="section-tag coach-title-tag" id="coach-tier-tag">// COACH SAYS</p>
           <p class="coach-verdict" id="coach-verdict"></p>
@@ -262,7 +266,6 @@
           <div class="coach-exercises" id="coach-exercises"></div>
         </div>
 
-        <!-- Train again -->
         <button class="btn-start btn-train-again" onclick="trainAgain()">
           <span>↺ TRAIN AGAIN</span>
           <span class="btn-arrow">→</span>
@@ -271,10 +274,9 @@
       </div>
     </section>
 
-  </div><!-- /#app -->
+  </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs/loader.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
